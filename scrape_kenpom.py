@@ -23,9 +23,8 @@ def scrape_website(url):
 
 def parse_data(html):
     soup = BeautifulSoup(html, 'html.parser')
-    table = soup.find('table', id='ratings-table')  # Assuming this is your table ID
+    table = soup.find('table', id='ratings-table')
     
-    # Initialize an empty list to hold your data
     data = []
     
     # Extract the table body rows
@@ -34,36 +33,49 @@ def parse_data(html):
     
     for row in rows:
         cols = row.find_all('td')
-        if cols:  # Ensure the row has data columns
-            # Extract specific columns by index. Adjust indexes if necessary.
+        if cols:
             rk = cols[0].text.strip()
             team = cols[1].text.strip()
             conf = cols[2].text.strip()
             wl = cols[3].text.strip()
             adjEM = cols[4].text.strip()
-            adjO = cols[5].text.strip()
-            adjD = cols[7].text.strip()  # Assuming there's a separation between AdjO and AdjD
-            adjT = cols[9].text.strip()  # Adjust based on actual separation
-            data.append([rk, team, conf, wl, adjEM, adjO, adjD, adjT])
+            adjO = cols[5].text.strip() # spacing between adjO and adjD, etc bc rankings
+            adjD = cols[7].text.strip()  
+            adjT = cols[9].text.strip() 
+            luck = cols[11].text.strip() 
+            data.append([rk, team, conf, wl, adjEM, adjO, adjD, adjT, luck])
     
-    # Create a DataFrame with the specified column names
-    columns = ['Rk', 'Team', 'Conf', 'W-L', 'AdjEM', 'AdjO', 'AdjD', 'AdjT']
+    # Create df with specified column names
+    columns = ['Rk', 'Team', 'Conf', 'W-L', 'AdjEM', 'AdjO', 'AdjD', 'AdjT', 'Luck']
     df = pd.DataFrame(data, columns=columns)
     return df
 
 def normalize_team_name(name):
-    # Convert to lowercase
     name = name.lower()
     # Replace 'st.' with 'state'
     name = re.sub(r'\bst\.?\b', 'state', name)
-    # Remove periods
     name = name.replace('.', '')
-    # Remove apostrophes
     name = name.replace("'", "")
     return name
 
+def filter_by_teams_ordered(df, team_names):
+    ordered_df = pd.DataFrame()
+
+    # Normalize input team names for easier user input
+    normalized_team_names = [normalize_team_name(name) for name in team_names]
+
+    for name in normalized_team_names:
+        # Filter the DataFrame for each team name, using the .apply() method to normalize names in the DataFrame for comparison
+        match = df[df['Team'].apply(normalize_team_name) == name]
+
+        if not match.empty:
+            ordered_df = pd.concat([ordered_df, match])
+
+    return ordered_df.reset_index(drop=True)
+
+
 def filter_by_teams(df, team_names):
-    # Normalize input team names according to the custom rules
+    # Normalize input team names
     normalized_team_names = [normalize_team_name(name) for name in team_names]
     
     # Create a temporary column for normalized team names in the DataFrame
@@ -75,7 +87,7 @@ def filter_by_teams(df, team_names):
     # Drop the temporary normalized column if you don't want it in the output
     filtered_df = filtered_df.drop(columns=['Normalized_Team'])
     
-    return filtered_df
+    return filter_by_teams_ordered(filtered_df, team_names)
 
 def get_data_for_teams(df):
     # Input for team names
@@ -83,19 +95,14 @@ def get_data_for_teams(df):
     team_names.append(input("Away Team: "))
     team_names.append(input("Home Team: "))
     
-    # Filtering the DataFrame for the specified teams
     specific_teams_df = filter_by_teams(df, team_names)
     
     return specific_teams_df
 
 def save_to_csv(df, team_names=[]):
-    # Get today's date
     today = datetime.date.today()
-
-    # Format the date as a string, e.g., '2023-03-09'
     date_str = today.strftime('%Y-%m-%d')
 
-    # Append the date to your filename
     if (len(team_names) == 2):
         filename = f'kenpom_data_{team_names[0]}_at_{team_names[1]}__{date_str}.csv'
     else:
@@ -106,14 +113,12 @@ def save_to_csv(df, team_names=[]):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
 
-    full_path = os.path.join((folder_path, filename))
-    # Use the filename when saving the DataFrame to a CSV
-    df.to_csv("./data/" + filename, index=False)
-    print(f"Kenpom data saved to '{filename}'.")
+    full_path = os.path.join(folder_path, filename) 
+    df.to_csv(full_path, index=False)
+    print(f"Kenpom data saved to '{full_path}'.")
     
 
 def main():
-    # Replace with the actual URL you're scraping
     url = 'https://kenpom.com/index.php#'
     html_content = scrape_website(url)
     
@@ -130,7 +135,7 @@ def main():
                     save_to_csv(team_df)
             except KeyboardInterrupt:
                 print("\nExiting...")
-                break  # Exit the loop
+                break  
     
     if SAVE_ALL_TO_CSV:
         save_to_csv(df)
